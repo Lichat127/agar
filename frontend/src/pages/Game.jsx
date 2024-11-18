@@ -23,6 +23,7 @@ const Game = () => {
     width: window.innerWidth,
     height: window.innerHeight,
   });
+  const [isGameOver, setIsGameOver] = useState(false);
 
   const directionRef = useRef({ x: 0, y: 0 });
 
@@ -34,6 +35,8 @@ const Game = () => {
       setFood(data.food);
       if (data.players[socket.id]) {
         setPlayer(data.players[socket.id]);
+      } else {
+        setIsGameOver(true);
       }
     });
 
@@ -157,52 +160,74 @@ const Game = () => {
     return () => cancelAnimationFrame(animationFrameId);
   }, [updatePlayerPosition, handleCollision]);
 
+  const restartGame = () => {
+    setIsGameOver(false);
+    const newPlayer = {
+      x: 400,
+      y: 300,
+      r: 30,
+      color: "blue",
+      speed: 5,
+    };
+    setPlayer(newPlayer);
+    setPlayerPosition({ x: 400, y: 300 });
+    socket.emit("restart", newPlayer);
+  };
+
   return (
     <div>
-      <svg
-        width={viewportSize.width}
-        height={viewportSize.height}
-        style={{
-          width: "100%",
-          height: "100%",
-          backgroundColor: "#f0f0f0",
-          border: "1px solid black",
-        }}
-        onMouseMove={handleMouseMove}
-      >
-        {Object.values(food).map((smallFood) => {
-          const { x, y } = playerCamera(smallFood.x, smallFood.y);
-          return (
-            <Food
-              key={smallFood.id}
-              x={x}
-              y={y}
-              r={smallFood.r}
-              color={smallFood.color}
-            />
-          );
-        })}
-        <Player
-          x={viewportSize.width / 2}
-          y={viewportSize.height / 2}
-          r={player.r}
-          color={player.color}
-        />
-        {Object.values(players)
-          .filter((player) => player.id !== socket.id)
-          .map((player) => {
-            const { x, y } = playerCamera(player.x, player.y);
+      {isGameOver && (
+        <div>
+          <h1>Vous avez perdu...</h1>{" "}
+          <button onClick={restartGame}>Rejouer</button>
+        </div>
+      )}
+      {!isGameOver && (
+        <svg
+          width={viewportSize.width}
+          height={viewportSize.height}
+          style={{
+            width: "100%",
+            height: "100%",
+            backgroundColor: "#f0f0f0",
+            border: "1px solid black",
+          }}
+          onMouseMove={handleMouseMove}
+        >
+          {Object.values(food).map((smallFood) => {
+            const { x, y } = playerCamera(smallFood.x, smallFood.y);
             return (
-              <Player
-                key={player.id}
+              <Food
+                key={smallFood.id}
                 x={x}
                 y={y}
-                r={player.r}
-                color={player.color}
+                r={smallFood.r}
+                color={smallFood.color}
               />
             );
           })}
-      </svg>
+          <Player
+            x={viewportSize.width / 2}
+            y={viewportSize.height / 2}
+            r={player.r}
+            color={player.color}
+          />
+          {Object.values(players)
+            .filter((player) => player.id !== socket.id)
+            .map((player) => {
+              const { x, y } = playerCamera(player.x, player.y);
+              return (
+                <Player
+                  key={player.id}
+                  x={x}
+                  y={y}
+                  r={player.r}
+                  color={player.color}
+                />
+              );
+            })}
+        </svg>
+      )}
     </div>
   );
 };

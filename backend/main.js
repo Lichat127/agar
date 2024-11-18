@@ -107,6 +107,14 @@ io.on("connection", (socket) => {
     io.emit("update", gameState);
   });
 
+  socket.on("restart", (newPlayer) => {
+    gameState.players[socket.id] = {
+      ...newPlayer,
+      id: socket.id,
+    };
+    io.emit("update", gameState);
+  });
+
   socket.on("disconnect", () => {
     delete gameState.players[socket.id];
     console.log("Joueur déconnecté: ", socket.id);
