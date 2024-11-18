@@ -4,7 +4,6 @@ import Food from "../components/Food";
 import Player from "../components/Player";
 
 const SOCKET_URL = "http://localhost:3000";
-const PLAYER_SPEED = 5;
 const WORLD_SIZE = { width: 2000, height: 2000 };
 
 const socket = io(SOCKET_URL);
@@ -15,6 +14,7 @@ const Game = () => {
     y: 300,
     r: 30,
     color: "blue",
+    speed: 5,
   });
   const [players, setPlayers] = useState({});
   const [food, setFood] = useState({});
@@ -23,6 +23,8 @@ const Game = () => {
     width: window.innerWidth,
     height: window.innerHeight,
   });
+
+  const directionRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     socket.on("connect", () => console.log("Connecté au serveur WebSocket"));
@@ -41,35 +43,38 @@ const Game = () => {
     };
   }, []);
 
-  const directionRef = useRef({ x: 0, y: 0 });
+  const handleMouseMove = useCallback(
+    (e) => {
+      const map = e.currentTarget.getBoundingClientRect();
+      const directionX = e.clientX - map.left - viewportSize.width / 2;
+      const directionY = e.clientY - map.top - viewportSize.height / 2;
 
-  const handleMouseMove = useCallback((e) => {
-    const map = e.currentTarget.getBoundingClientRect();
-    const directionX = e.clientX - map.left - viewportSize.width / 2;
-    const directionY = e.clientY - map.top - viewportSize.height / 2;
+      const length = Math.sqrt(
+        directionX * directionX + directionY * directionY
+      );
 
-    const length = Math.sqrt(directionX * directionX + directionY * directionY);
+      if (length > 0) {
+        const normalizedX = directionX / length;
+        const normalizedY = directionY / length;
 
-    if (length > 0) {
-      const normalizedX = directionX / length;
-      const normalizedY = directionY / length;
-
-      directionRef.current = {
-        x: normalizedX,
-        y: normalizedY,
-      };
-    } else {
-      directionRef.current = {
-        x: 0,
-        y: 0,
-      };
-    }
-  }, []);
+        directionRef.current = {
+          x: normalizedX,
+          y: normalizedY,
+        };
+      } else {
+        directionRef.current = {
+          x: 0,
+          y: 0,
+        };
+      }
+    },
+    [viewportSize.height, viewportSize.width]
+  );
 
   const updatePlayerPosition = useCallback(() => {
     const { x: directionX, y: directionY } = directionRef.current;
-    const deltaX = directionX * PLAYER_SPEED;
-    const deltaY = directionY * PLAYER_SPEED;
+    const deltaX = directionX * player.speed;
+    const deltaY = directionY * player.speed;
 
     setPlayerPosition((prevPlayerPosition) => {
       const newPlayerPositionX =
@@ -91,29 +96,16 @@ const Game = () => {
 
       return { x: newPlayerPositionX, y: newPlayerPositionY };
     });
-  }, []);
-
-  useEffect(() => {
-    let animationFrameId;
-    const gameLoop = () => {
-      updatePlayerPosition();
-      animationFrameId = requestAnimationFrame(gameLoop);
-    };
-    gameLoop();
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [updatePlayerPosition]);
+  }, [player.speed]);
 
   const playerCamera = (x, y) => {
-    const playerPositionX = viewportSize.width / 2;
-    const playerPositionY = viewportSize.height / 2;
-
+    const playerPositionX =
+      (x - playerPosition.x + WORLD_SIZE.width) % WORLD_SIZE.width;
+    const playerPositionY =
+      (y - playerPosition.y + WORLD_SIZE.height) % WORLD_SIZE.height;
     return {
-      x:
-        (x - playerPosition.x + playerPositionX + WORLD_SIZE.width) %
-        WORLD_SIZE.width,
-      y:
-        (y - playerPosition.y + playerPositionY + WORLD_SIZE.height) %
-        WORLD_SIZE.height,
+      x: (playerPositionX / WORLD_SIZE.width) * viewportSize.width,
+      y: (playerPositionY / WORLD_SIZE.height) * viewportSize.height,
     };
   };
 
@@ -128,6 +120,42 @@ const Game = () => {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  const checkCollision = (circle1, circle2) => {
+    const dx = circle1.x - circle2.x;
+    const dy = circle1.y - circle2.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    return distance < circle1.r + circle2.r;
+  };
+
+  const handleCollision = useCallback(() => {
+    Object.values(food).forEach((smallFood) => {
+      if (checkCollision(player, smallFood)) {
+        console.log("Le joueur mange: ", smallFood.id);
+        socket.emit("eatFood", smallFood.id);
+      }
+    });
+
+    Object.values(players).forEach((otherPlayer) => {
+      if (otherPlayer.id !== socket.id && checkCollision(player, otherPlayer)) {
+        console.log("Collision avec un autre joueur");
+        if (player.r > otherPlayer.r) {
+          socket.emit("eatPlayer", otherPlayer.id);
+        }
+      }
+    });
+  }, [player, players, food]);
+
+  useEffect(() => {
+    let animationFrameId;
+    const gameLoop = () => {
+      updatePlayerPosition();
+      handleCollision();
+      animationFrameId = requestAnimationFrame(gameLoop);
+    };
+    gameLoop();
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [updatePlayerPosition, handleCollision]);
 
   return (
     <div>
