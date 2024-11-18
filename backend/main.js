@@ -65,7 +65,12 @@ io.on("connection", (socket) => {
   const player = initPlayer(socket);
   console.log("Player connected: ", player);
 
-  socket.emit("update", gameState);
+  socket.on("updatePosition", ({ x, y }) => {
+    if (gameState.players[socket.id]) {
+      gameState.players[socket.id].x = x;
+      gameState.players[socket.id].y = y;
+    }
+  });
 
   socket.on("disconnect", () => {
     delete gameState.players[socket.id];
@@ -73,8 +78,15 @@ io.on("connection", (socket) => {
   });
 });
 
+function startGame() {
+  setInterval(() => {
+    io.emit("update", gameState);
+  }, GAME_PARAM.UPDATE_INTERVAL);
+}
+
 function startServer() {
   initFood();
+  startGame();
   server.listen(PORT, () => {
     console.log(`listen on port ${PORT}`);
   });
